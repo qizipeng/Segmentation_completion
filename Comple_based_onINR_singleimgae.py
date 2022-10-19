@@ -174,9 +174,11 @@ class my_Net(nn.Module):
 
     def forward(self, x):
         x = self.embedder(x)   ####  C 42
+
+        # print(x.shape)
         x = self.layer1(x)
         x = self.relu(x)
-
+        # print(x.shape)
         x = self.layer2(x)
         x = self.relu(x)
 
@@ -196,7 +198,7 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
 
     #### Now the mask image is not correct
     dataset = my_dataset(img_path, mask_path)
-    train_dataloader = DataLoader(dataset = dataset, batch_size=500,shuffle= True)
+    train_dataloader = DataLoader(dataset = dataset, batch_size=1000,shuffle= True)
 
     net = my_Net(n_class).to(device = device)
     net.train()
@@ -217,23 +219,24 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
         for index, batch in enumerate(train_dataloader):
             optimizer.zero_grad()
 
-            result = net(batch["position"].unsqueeze(0))   ###1 100 2
-            gt = batch["class"].unsqueeze(0)[...,0]    ###1 100 3-> 1 100
-            result = result.permute(0,2,1)
-            loss = Loss(result,gt.long())    ###B C N , B N
+            result = net(batch["position"].unsqueeze(1))   ### b 1  2
+            gt = batch["class"][...,0]    ###100 3-> 100
+            result = result.permute(0,2,1)[...,0]  ###b 1 20 -> b 20
+            # print(result.shape, gt.shape)
+            loss = Loss(result,gt.long())    ###B C , B
             loss.backward()
             loss_epoch.append(loss.item())
             # print(result.shape)
             # result = F.softmax(result, dim=1)
             # result = torch.argmax(result, dim=1)
-            # print(result)
+            # print(gt)
             print("epoch_{}/iter_{}: {}".format(i, index, loss.item()))
             optimizer.step()
 
         loss_all.append(np.mean(loss_epoch))
         print(np.mean(loss_epoch))
         loss_epoch.clear()
-
+        print("saving...")
         state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i}
         torch.save(state, os.path.join(checkpoints_dir,"checkpoint_{}.pth".format(i)))
         plt.cla()
@@ -254,8 +257,10 @@ def test(n_class, checkpoint):
     x, y = np.meshgrid(np.arange(shape[0], dtype=np.float32),
                        np.arange(shape[1], dtype=np.float32))
     position = np.stack([y, x], 2)
-    position = torch.from_numpy(position).float().to(device=device).reshape([-1,2]).unsqueeze(0)
+    position = torch.from_numpy(position).float().to(device=device).reshape([-1,2]).unsqueeze(1)
+    print(position.shape)
     results = net(position)
+    print(results.shape)
     img = F.softmax(results, dim=-1)
     img = torch.argmax(img, dim=-1)
     img = torch.reshape(img,(512,512)).cpu().numpy()
@@ -281,7 +286,7 @@ if __name__ == "__main__":
 
     checkpoints_dir = "./checkpoints"
     n_class = 20
-    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
-    # test(n_class, checkpoint = "checkpoint_8.pth")
+    # train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
+    test(n_class, checkpoint = "checkpoint_6.pth")
 
 
