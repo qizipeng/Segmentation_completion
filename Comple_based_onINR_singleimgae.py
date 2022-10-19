@@ -211,7 +211,7 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
     state = OrderedDict()
 
     if continue_traning:
-        to_load = torch.load("./checkpoints/checkpoint_8.pth")
+        to_load = torch.load("./checkpoints/checkpoint_6.pth")
         start = to_load["epoch"]
         net.load_state_dict(to_load["net"], strict=False)
     print(len(train_dataloader))
@@ -226,10 +226,11 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
             loss = Loss(result,gt.long())    ###B C , B
             loss.backward()
             loss_epoch.append(loss.item())
-            # print(result.shape)
-            # result = F.softmax(result, dim=1)
-            # result = torch.argmax(result, dim=1)
-            # print(gt)
+            print(result.shape)
+            result = F.softmax(result, dim=1)
+            result = torch.argmax(result, dim=1)
+            print(result)
+            print(gt)
             print("epoch_{}/iter_{}: {}".format(i, index, loss.item()))
             optimizer.step()
 
@@ -269,11 +270,7 @@ def test(n_class, checkpoint):
         for y in range(512):
             result_color[x,y,:] = carla[img[x,y],:]
 
-    Image.fromarray(result_color).convert("L").save("./result_color.png")
-
-
-
-    print(img.shape)
+    Image.fromarray(result_color).save("./result_color.png")
 
 
 if __name__ == "__main__":
@@ -286,7 +283,7 @@ if __name__ == "__main__":
 
     checkpoints_dir = "./checkpoints"
     n_class = 20
-    # train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
+    # train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=True)
     test(n_class, checkpoint = "checkpoint_6.pth")
 
 
