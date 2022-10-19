@@ -15,3 +15,7 @@ missing:
 ![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/imgs/row_mask_color.png)
 
 Our results:
+
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/result_color.png)
+
+I will experiment wtih other method, e.g. SIREN or something
