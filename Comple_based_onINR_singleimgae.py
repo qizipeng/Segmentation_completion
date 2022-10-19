@@ -5,8 +5,35 @@ import torch.nn as nn
 import torch.optim as optim
 from PIL import Image
 import matplotlib.pyplot as plt
+from collections import OrderedDict
+import torch.nn.functional as F
 import os
 import numpy as np
+
+carla = [
+   [70 ,70 ,70],
+   [150 , 60,  45],
+   [180 ,130 , 70],
+   [232 , 35 ,244],
+   [ 35 ,142 ,107],
+   [100 ,170 ,145],
+   [160 ,190 ,110],
+   [153 ,153 ,153],
+   [80 ,90 ,55],
+   [ 50 ,120 ,170],
+   [128 , 64 ,128],
+   [ 50 ,234 ,157],
+   [142 ,  0  , 0],
+   [  0 ,220 ,220],
+   [ 30 ,170 ,250],
+   [156 ,102 ,102],
+   [ 40 , 40 ,100],
+   [81  ,0 ,81],
+   [140 ,150 ,230],
+   [100 ,100 ,150]
+]
+carla = np.array(carla)
+
 
 device = "cuda:0"
 
@@ -77,7 +104,7 @@ class my_dataset(Dataset):
 
         self.img = np.array(Image.open(self.img_path))
         self.mask = np.array(Image.open(self.mask_path))
-        assert (self.img.shape[0] == self.mask.shape[0]) and (self.img.shape[1] == self.mask.shape[1]), "Image shape is not mask shape"
+        assert (self.img.shape[0] == self.mask.shape[0]) and (self.img.shape[1] == self.mask.shape[1]), "Image shape is not equal to mask shape"
         assert self.mask.ndim ==2 ,"the ndim of mask need to be two"
         self.shape = self.img.shape
         self.position = self.mask_to_position()
@@ -163,7 +190,7 @@ class my_Net(nn.Module):
 
         return x
 
-def train(img_path, mask_path, n_class, checkpoints_dir):
+def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = False):
     if not os.path.exists(checkpoints_dir):
         os.mkdir(checkpoints_dir)
 
@@ -173,24 +200,34 @@ def train(img_path, mask_path, n_class, checkpoints_dir):
 
     net = my_Net(n_class).to(device = device)
     net.train()
-    optimizer = optim.Adam(net.parameters(), lr = 1e-5)
+    optimizer = optim.Adam(net.parameters(), lr = 1e-3)
 
     loss_all = []
     loss_epoch = []
     total_epoch = 100
+    start = 0
+    state = OrderedDict()
 
+    if continue_traning:
+        to_load = torch.load("./checkpoints/checkpoint_8.pth")
+        start = to_load["epoch"]
+        net.load_state_dict(to_load["net"], strict=False)
     print(len(train_dataloader))
-    for i in range(total_epoch):
+    for i in range(start, total_epoch):
         for index, batch in enumerate(train_dataloader):
             optimizer.zero_grad()
 
             result = net(batch["position"].unsqueeze(0))   ###1 100 2
             gt = batch["class"].unsqueeze(0)[...,0]    ###1 100 3-> 1 100
             result = result.permute(0,2,1)
-
             loss = Loss(result,gt.long())    ###B C N , B N
             loss.backward()
             loss_epoch.append(loss.item())
+            # print(result.shape)
+            # result = F.softmax(result, dim=1)
+            # result = torch.argmax(result, dim=1)
+            # print(result)
+            print("epoch_{}/iter_{}: {}".format(i, index, loss.item()))
             optimizer.step()
 
         loss_all.append(np.mean(loss_epoch))
@@ -199,13 +236,15 @@ def train(img_path, mask_path, n_class, checkpoints_dir):
 
         state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i}
         torch.save(state, os.path.join(checkpoints_dir,"checkpoint_{}.pth".format(i)))
-    plt.cla()
-    plt.plot(range(0, len(loss_all)), loss_all)
-    plt.savefig("./loss_all.png")
-def test(n_class):
+        plt.cla()
+        plt.plot(range(0, len(loss_all)), loss_all)
+        plt.savefig("./loss_all.png")
+def test(n_class, checkpoint):
     net = my_Net(n_class).to(device=device)
     net.eval()
-    net.load("./#.pth")
+    to_load = torch.load(os.path.join("./checkpoints",checkpoint))
+    # start = to_load["epoch"]
+    net.load_state_dict(to_load["net"], strict=False)
 
     ##no need dataloader, process all position
     # dataset = my_dataset("./img.png", "./mask.png")
@@ -215,10 +254,21 @@ def test(n_class):
     x, y = np.meshgrid(np.arange(shape[0], dtype=np.float32),
                        np.arange(shape[1], dtype=np.float32))
     position = np.stack([y, x], 2)
-
     position = torch.from_numpy(position).float().to(device=device).reshape([-1,2]).unsqueeze(0)
+    results = net(position)
+    img = F.softmax(results, dim=-1)
+    img = torch.argmax(img, dim=-1)
+    img = torch.reshape(img,(512,512)).cpu().numpy()
+    result_color = np.ones((512,512,3)).astype(np.uint8)
+    for x in range(512):
+        for y in range(512):
+            result_color[x,y,:] = carla[img[x,y],:]
 
-    # print(position.shape)
+    Image.fromarray(result_color).convert("L").save("./result_color.png")
+
+
+
+    print(img.shape)
 
 
 if __name__ == "__main__":
@@ -231,7 +281,7 @@ if __name__ == "__main__":
 
     checkpoints_dir = "./checkpoints"
     n_class = 20
-    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir)
-    # test(n_class)
+    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
+    # test(n_class, checkpoint = "checkpoint_8.pth")
 
 
