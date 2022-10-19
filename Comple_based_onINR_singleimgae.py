@@ -78,6 +78,7 @@ class my_dataset(Dataset):
         self.img = np.array(Image.open(self.img_path))
         self.mask = np.array(Image.open(self.mask_path))
         assert (self.img.shape[0] == self.mask.shape[0]) and (self.img.shape[1] == self.mask.shape[1]), "Image shape is not mask shape"
+        assert self.mask.ndim ==2 ,"the ndim of mask need to be two"
         self.shape = self.img.shape
         self.position = self.mask_to_position()
 
@@ -101,7 +102,7 @@ class my_dataset(Dataset):
         """
         shape = self.shape
         ## Now maks is wrong
-        mask_stretch = self.mask[:,:,0].reshape(shape[0]*shape[1])
+        mask_stretch = self.mask.reshape(shape[0]*shape[1])
         img_stretch = self.img.reshape(shape[0]*shape[1],-1)
         # print(np.size(mask_stretch))
         position_stretch = self.position.reshape(shape[0]*shape[1],2)
@@ -123,7 +124,7 @@ class my_dataset(Dataset):
 
     def __len__(self):
 
-        return np.sum(np.where(self.mask[:,:,0] == 1 ,1,0))
+        return np.sum(np.where(self.mask == 1 ,1,0))
 
 
 class my_Net(nn.Module):
@@ -162,12 +163,12 @@ class my_Net(nn.Module):
 
         return x
 
-def train(n_class, checkpoints_dir):
+def train(img_path, mask_path, n_class, checkpoints_dir):
     if not os.path.exists(checkpoints_dir):
         os.mkdir(checkpoints_dir)
 
     #### Now the mask image is not correct
-    dataset = my_dataset("./img.png", "./mask.png")
+    dataset = my_dataset(img_path, mask_path)
     train_dataloader = DataLoader(dataset = dataset, batch_size=500,shuffle= True)
 
     net = my_Net(n_class).to(device = device)
@@ -181,7 +182,6 @@ def train(n_class, checkpoints_dir):
     print(len(train_dataloader))
     for i in range(total_epoch):
         for index, batch in enumerate(train_dataloader):
-            print(index)
             optimizer.zero_grad()
 
             result = net(batch["position"].unsqueeze(0))   ###1 100 2
@@ -222,7 +222,7 @@ def test(n_class):
 
 
 if __name__ == "__main__":
-    dataset = my_dataset("./img.png", "./mask.png")
+    # dataset = my_dataset("./imgs/img.png", "./imgs/row_mask.png")
     # print(len(dataset))
     # print(dataset[0])
     #train = DataLoader(dataset = dataset, batch_size=100,shuffle= True)
@@ -230,8 +230,8 @@ if __name__ == "__main__":
     #     print(i,":", data.shape)
 
     checkpoints_dir = "./checkpoints"
-    n_class =3
-    train(n_class, checkpoints_dir)
+    n_class = 20
+    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir)
     # test(n_class)
 
 
