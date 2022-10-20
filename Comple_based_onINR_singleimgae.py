@@ -143,16 +143,18 @@ class my_dataset(Dataset):
         img_stretch_valid = torch.from_numpy(img_stretch_valid).int().to(device= device)
         # print(position_stretch_valid.shape)
 
-
+        ### return all the valid coordinates
         return {
-                "position":position_stretch_valid[index,:],
-                "class": img_stretch_valid[index,:]
+                "position":position_stretch_valid,#[index,:],
+                "class": img_stretch_valid#[index,:]
                 }
 
 
     def __len__(self):
 
-        return np.sum(np.where(self.mask == 1 ,1,0))
+        return 1
+        ## return all the valid coordinates
+        #return np.sum(np.where(self.mask == 1 ,1,0))
 
 
 class my_Net(nn.Module):
@@ -165,10 +167,12 @@ class my_Net(nn.Module):
     def __init__(self, n_class):
         super(my_Net,self).__init__()
 
-        self.layer1 = nn.Linear(42,100)
-        self.layer2 = nn.Linear(100,60)
-        self.layer3 = nn.Linear(60,20)
-        self.layer4 = nn.Linear(20,n_class)
+        self.layer1 = nn.Linear(2,256)
+        self.layer2 = nn.Linear(256,256)
+        self.layer3 = nn.Linear(256,256)
+        self.layer4 = nn.Linear(256,256)
+        self.layer5 = nn.Linear(256,256)
+        self.layer6 = nn.Linear(256,n_class)
         self.relu = nn.ReLU()
         self.sigmod = nn.Sigmoid()
         self.embedder = Embedder(input_dim=2,
@@ -178,13 +182,13 @@ class my_Net(nn.Module):
         # self.sin = torch.sin()
 
     def forward(self, x):
-        x = self.embedder(x)   ####  C 42
+        x = x.clone().detach().requires_grad_(True)
+
+        # x = self.embedder(x)   ####  C 42
 
         # print(x.shape)
         x = self.layer1(x)
-
         ###using sin as activation function
-
         x = torch.sin(30* x)
 
         # x = self.relu(x)
@@ -198,6 +202,12 @@ class my_Net(nn.Module):
         x = self.layer4(x)
         x = torch.sin(30* x)
 
+        x = self.layer5(x)
+        x = torch.sin(30* x)
+
+        x = self.layer6(x)
+        # x = torch.sin(30* x)
+
         # x = self.sigmod(x)
 
         return x
@@ -208,15 +218,15 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
 
     #### Now the mask image is not correct
     dataset = my_dataset(img_path, mask_path)
-    train_dataloader = DataLoader(dataset = dataset, batch_size=1000,shuffle= True)
+    train_dataloader = DataLoader(dataset = dataset, batch_size=1,shuffle= True)
 
-    net = my_Net(n_class).to(device = device)
+    net = my_Net(n_class).cuda().to(device = device)
     net.train()
-    optimizer = optim.Adam(net.parameters(), lr = 1e-3)
+    optimizer = optim.Adam(net.parameters(), lr = 1e-4)
 
     loss_all = []
     loss_epoch = []
-    total_epoch = 100
+    total_epoch = 5000
     start = 0
     state = OrderedDict()
 
@@ -227,13 +237,14 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
     print(len(train_dataloader))
     for i in range(start, total_epoch):
         for index, batch in enumerate(train_dataloader):
-            optimizer.zero_grad()
-
-            result = net(batch["position"].unsqueeze(1))   ### b 1  2
+            result = net(batch["position"].cuda().to(device = device))   ### b 1  2
             gt = batch["class"][...,0]    ###100 3-> 100
-            result = result.permute(0,2,1)[...,0]  ###b 1 20 -> b 20
+
+            # print(result.shape)
+            result = result.permute(0,2,1)  ###b 1 20 -> b 20
             # print(result.shape, gt.shape)
             loss = Loss(result,gt.long())    ###B C , B
+            optimizer.zero_grad()
             loss.backward()
             loss_epoch.append(loss.item())
             # print(result.shape)
@@ -247,14 +258,15 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
         loss_all.append(np.mean(loss_epoch))
         print(np.mean(loss_epoch))
         loss_epoch.clear()
-        print("saving...")
-        state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i}
-        torch.save(state, os.path.join(checkpoints_dir,"checkpoint_{}.pth".format(i)))
+        if i %100 ==0:
+            print("saving...")
+            state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i}
+            torch.save(state, os.path.join(checkpoints_dir,"checkpoint_{}.pth".format(i)))
         plt.cla()
         plt.plot(range(0, len(loss_all)), loss_all)
         plt.savefig("./loss_all.png")
 def test(n_class, checkpoint):
-    net = my_Net(n_class).to(device=device)
+    net = my_Net(n_class).cuda().to(device=device)
     net.eval()
     to_load = torch.load(os.path.join("./checkpoints",checkpoint))
     # start = to_load["epoch"]
@@ -265,10 +277,11 @@ def test(n_class, checkpoint):
     # test_dataloader = DataLoader(dataset=dataset, batch_size=100)
 
     shape = (512,512)
-    x, y = np.meshgrid(np.arange(shape[0], dtype=np.float32),
-                       np.arange(shape[1], dtype=np.float32))
+    x, y = np.meshgrid(np.linspace(-1, 1, num=shape[0]).astype(np.float32),
+                       np.linspace(-1, 1, num=shape[1]).astype(np.float32))
     position = np.stack([y, x], 2)
-    position = torch.from_numpy(position).float().to(device=device).reshape([-1,2]).unsqueeze(1)
+    print(position.shape)
+    position = torch.from_numpy(position).float().cuda().to(device=device).reshape([-1,2]).unsqueeze(0)
     print(position.shape)
     results = net(position)
     print(results.shape)
@@ -294,6 +307,6 @@ if __name__ == "__main__":
     checkpoints_dir = "./checkpoints"
     n_class = 20
     train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
-    # test(n_class, checkpoint = "checkpoint_6.pth")
+    # test(n_class, checkpoint = "checkpoint_900.pth")
 
 
