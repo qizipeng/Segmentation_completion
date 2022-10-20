@@ -115,8 +115,9 @@ class my_dataset(Dataset):
         obain the pixel position in Image plane
         """
         shape = self.shape
-        x, y = np.meshgrid(np.arange(shape[0], dtype = np.float32),
-                           np.arange(shape[1], dtype=np.float32))
+        ### the range of coordinate from -1 to 1
+        x, y = np.meshgrid(np.linspace(-1, 1, num= shape[0]).astype(np.float32),
+                           np.linspace(-1, 1, num= shape[1]).astype(np.float32))
         position = np.stack([y,x], 2)  ###dont be sure which is colum or row... row = x??
         return position
 
@@ -158,6 +159,8 @@ class my_Net(nn.Module):
     """
     :param
     n_class
+
+    using the sin as activation function
     """
     def __init__(self, n_class):
         super(my_Net,self).__init__()
@@ -172,21 +175,28 @@ class my_Net(nn.Module):
                  max_freq_log2=10 - 1,
                  N_freqs=10)
 
+        # self.sin = torch.sin()
+
     def forward(self, x):
         x = self.embedder(x)   ####  C 42
 
         # print(x.shape)
         x = self.layer1(x)
-        x = self.relu(x)
+
+        ###using sin as activation function
+
+        x = torch.sin(30* x)
+
+        # x = self.relu(x)
         # print(x.shape)
         x = self.layer2(x)
-        x = self.relu(x)
+        x = torch.sin(30* x)
 
         x = self.layer3(x)
-        x = self.relu(x)
+        x = torch.sin(30* x)
 
         x = self.layer4(x)
-        x = self.relu(x)
+        x = torch.sin(30* x)
 
         # x = self.sigmod(x)
 
@@ -226,11 +236,11 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
             loss = Loss(result,gt.long())    ###B C , B
             loss.backward()
             loss_epoch.append(loss.item())
-            print(result.shape)
-            result = F.softmax(result, dim=1)
-            result = torch.argmax(result, dim=1)
-            print(result)
-            print(gt)
+            # print(result.shape)
+            # result = F.softmax(result, dim=1)
+            # result = torch.argmax(result, dim=1)
+            # print(result)
+            # print(gt)
             print("epoch_{}/iter_{}: {}".format(i, index, loss.item()))
             optimizer.step()
 
@@ -283,7 +293,7 @@ if __name__ == "__main__":
 
     checkpoints_dir = "./checkpoints"
     n_class = 20
-    # train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=True)
-    test(n_class, checkpoint = "checkpoint_6.pth")
+    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
+    # test(n_class, checkpoint = "checkpoint_6.pth")
 
 
