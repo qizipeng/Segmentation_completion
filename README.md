@@ -16,6 +16,6 @@ missing:
 
 Our results:
 
-![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/result_color.png)
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/checkpoint_4900.pthresult_color.png)
 
 I will experiment wtih other method, e.g. SIREN or something
