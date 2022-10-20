@@ -6,6 +6,7 @@ import torch.optim as optim
 from PIL import Image
 import matplotlib.pyplot as plt
 from collections import OrderedDict
+from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 import torch.nn.functional as F
 import os
 import numpy as np
@@ -38,6 +39,7 @@ carla = np.array(carla)
 device = "cuda:0"
 
 Loss = nn.CrossEntropyLoss()
+L2 = nn.MSELoss()
 
 class Embedder(nn.Module):
     def __init__(self, input_dim, max_freq_log2, N_freqs,
@@ -130,6 +132,13 @@ class my_dataset(Dataset):
         """
         shape = self.shape
         ## Now maks is wrong
+
+        transform = Compose([
+            ToTensor(),
+            Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))
+        ])
+
+
         mask_stretch = self.mask.reshape(shape[0]*shape[1])
         img_stretch = self.img.reshape(shape[0]*shape[1],-1)
         # print(np.size(mask_stretch))
@@ -139,9 +148,8 @@ class my_dataset(Dataset):
         position_stretch_valid = position_stretch[position_valid==True,:]
         img_stretch_valid = img_stretch[position_valid==True,:]
         ###from numpy to tensor
-        position_stretch_valid = torch.from_numpy(position_stretch_valid).float().to(device= device)
-        img_stretch_valid = torch.from_numpy(img_stretch_valid).int().to(device= device)
-        # print(position_stretch_valid.shape)
+        position_stretch_valid = torch.from_numpy(position_stretch_valid).float()
+        img_stretch_valid = torch.from_numpy(img_stretch_valid).int()[...,0]
 
         ### return all the valid coordinates
         return {
@@ -179,7 +187,33 @@ class my_Net(nn.Module):
                  max_freq_log2=10 - 1,
                  N_freqs=10)
 
+        self.first_layer_sine_init(self.layer1)
+
+        self.sine_init(self.layer2)
+        self.sine_init(self.layer3)
+        self.sine_init(self.layer4)
+        self.sine_init(self.layer5)
+        self.sine_init(self.layer6)
+
         # self.sin = torch.sin()
+
+
+    #####the init is very important
+    def sine_init(self, m):
+        with torch.no_grad():
+            if hasattr(m, 'weight'):
+                num_input = m.weight.size(-1)
+                # See supplement Sec. 1.5 for discussion of factor 30
+                m.weight.uniform_(-np.sqrt(6 / num_input) / 30, np.sqrt(6 / num_input) / 30)
+
+    def first_layer_sine_init(self, m):
+        with torch.no_grad():
+            if hasattr(m, 'weight'):
+                num_input = m.weight.size(-1)
+                # See paper sec. 3.2, final paragraph, and supplement Sec. 1.5 for discussion of factor 30
+                m.weight.uniform_(-1 / num_input, 1 / num_input)
+
+
 
     def forward(self, x):
         x = x.clone().detach().requires_grad_(True)
@@ -222,45 +256,43 @@ def train(img_path, mask_path, n_class, checkpoints_dir, continue_traning = Fals
 
     net = my_Net(n_class).cuda().to(device = device)
     net.train()
-    optimizer = optim.Adam(net.parameters(), lr = 1e-4)
+    optimizer = optim.Adam(net.parameters(), lr = 1e-3)
 
     loss_all = []
     loss_epoch = []
-    total_epoch = 5000
+    total_epoch = 5000#30000
     start = 0
     state = OrderedDict()
 
     if continue_traning:
-        to_load = torch.load("./checkpoints/checkpoint_6.pth")
+        to_load = torch.load("./checkpoints/checkpoint_800.pth")
         start = to_load["epoch"]
+        loss_all = to_load["loss_all"]
         net.load_state_dict(to_load["net"], strict=False)
     print(len(train_dataloader))
     for i in range(start, total_epoch):
         for index, batch in enumerate(train_dataloader):
             result = net(batch["position"].cuda().to(device = device))   ### b 1  2
-            gt = batch["class"][...,0]    ###100 3-> 100
+            gt = batch["class"].cuda().to(device = device)    ###100 3-> 100
 
-            # print(result.shape)
+            # print(result.shape, gt.shape)
             result = result.permute(0,2,1)  ###b 1 20 -> b 20
             # print(result.shape, gt.shape)
+            ##classification
             loss = Loss(result,gt.long())    ###B C , B
+            # loss = L2(result.float(),gt.float())
             optimizer.zero_grad()
             loss.backward()
             loss_epoch.append(loss.item())
-            # print(result.shape)
-            # result = F.softmax(result, dim=1)
-            # result = torch.argmax(result, dim=1)
-            # print(result)
-            # print(gt)
             print("epoch_{}/iter_{}: {}".format(i, index, loss.item()))
             optimizer.step()
 
         loss_all.append(np.mean(loss_epoch))
-        print(np.mean(loss_epoch))
+        # print(np.mean(loss_epoch))
         loss_epoch.clear()
         if i %100 ==0:
             print("saving...")
-            state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i}
+            state = {"net" :net.state_dict(), 'optimizer':optimizer.state_dict(), "epoch":i, "loss_all": loss_all}
             torch.save(state, os.path.join(checkpoints_dir,"checkpoint_{}.pth".format(i)))
         plt.cla()
         plt.plot(range(0, len(loss_all)), loss_all)
@@ -280,20 +312,19 @@ def test(n_class, checkpoint):
     x, y = np.meshgrid(np.linspace(-1, 1, num=shape[0]).astype(np.float32),
                        np.linspace(-1, 1, num=shape[1]).astype(np.float32))
     position = np.stack([y, x], 2)
-    print(position.shape)
+    # print(position.shape)
     position = torch.from_numpy(position).float().cuda().to(device=device).reshape([-1,2]).unsqueeze(0)
-    print(position.shape)
+    # print(position.shape)
     results = net(position)
-    print(results.shape)
     img = F.softmax(results, dim=-1)
     img = torch.argmax(img, dim=-1)
     img = torch.reshape(img,(512,512)).cpu().numpy()
     result_color = np.ones((512,512,3)).astype(np.uint8)
     for x in range(512):
         for y in range(512):
-            result_color[x,y,:] = carla[img[x,y],:]
+            result_color[x,y,:] = carla[int(img[x,y]),:]
 
-    Image.fromarray(result_color).save("./result_color.png")
+    Image.fromarray(result_color).save("./"+checkpoint+"result_color.png")
 
 
 if __name__ == "__main__":
@@ -306,7 +337,9 @@ if __name__ == "__main__":
 
     checkpoints_dir = "./checkpoints"
     n_class = 20
-    train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=False)
-    # test(n_class, checkpoint = "checkpoint_900.pth")
+
+    # train("./imgs/img.png", "./imgs/row_mask.png", n_class, checkpoints_dir, continue_traning=True)
+
+    test(n_class, checkpoint = "checkpoint_4900.pth")
 
 
