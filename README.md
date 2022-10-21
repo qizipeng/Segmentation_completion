@@ -15,7 +15,16 @@ missing:
 ![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/imgs/row_mask_color.png)
 
 Our results:
-
-![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/checkpoint_4900.pthresult_color.png)
-
-I will experiment wtih other method, e.g. SIREN or something
+random init + relu activation function:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/noinit%2Brelu%2B4900.png)
+loss:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/noinit%2Brelu%2Bloss_all.png)
+sin init + relu activation function:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/sininit%2Brelu%2B4900.png)
+loss:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/sininit%2Brelu%2Bloss_all.png)
+sin init + sin activation function:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/sininit%2Bsinactivaction_4900.png)
+loss:
+![Image text](https://github.com/qizipeng/Segmentation_completion/blob/master/results/sininit%2Bsinactivaction%2Bloss_all.png)
+The sin init + sin activation functinon takes eight hundreds of training results to pause and resume training to get better results.
