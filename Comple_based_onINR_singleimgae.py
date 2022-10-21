@@ -138,7 +138,6 @@ class my_dataset(Dataset):
             Normalize(torch.Tensor([0.5]), torch.Tensor([0.5]))
         ])
 
-
         mask_stretch = self.mask.reshape(shape[0]*shape[1])
         img_stretch = self.img.reshape(shape[0]*shape[1],-1)
         # print(np.size(mask_stretch))
@@ -223,20 +222,25 @@ class my_Net(nn.Module):
         # print(x.shape)
         x = self.layer1(x)
         ###using sin as activation function
+        # x = self.relu(x)
         x = torch.sin(30* x)
 
         # x = self.relu(x)
         # print(x.shape)
         x = self.layer2(x)
+        # x = self.relu(x)
         x = torch.sin(30* x)
 
         x = self.layer3(x)
+        # x = self.relu(x)
         x = torch.sin(30* x)
 
         x = self.layer4(x)
+        # x = self.relu(x)
         x = torch.sin(30* x)
 
         x = self.layer5(x)
+        # x = self.relu(x)
         x = torch.sin(30* x)
 
         x = self.layer6(x)
